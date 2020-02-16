@@ -1,0 +1,138 @@
+C51 COMPILER V9.00   MAIN                                                                  02/15/2020 20:26:29 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE main.c COMPACT BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include <stdio.h>//C标准输入输出库，用到了sprintf
+   2          #include "DHT11.H"//DHT11库
+   3          #include "UART.H"
+   4          #include <string.h>
+   5          
+   6          /*******************************************************************************
+   7          * 函数名  : Timer0_Init
+   8          * 描述    : 定时器0初始化配置
+   9          * 输入    : 无
+  10          * 输出    : 无
+  11          * 返回值  : 无
+  12          * 说明    : 无
+  13          *******************************************************************************/
+  14          void Timer0_Init(void)
+  15          {
+  16   1          AUXR |= 0x80;               //定时器0为1T模式
+  17   1              TMOD &= 0xF0;           
+  18   1          TMOD |= 0x01;               //设置定时器为模式0(16位自动重装载)
+  19   1          TL0 = T1MS;                 //初始化计时值
+  20   1          TH0 = T1MS >> 8;
+  21   1          TR0 = 1;                    //定时器0开始计时
+  22   1          ET0 = 1;                    //使能定时器0中断
+  23   1          EA = 1;                             //使能总中断                                                    
+  24   1      }
+  25          /*******************************************************************************
+  26          * 函数名  : main
+  27          * 描述    : 主函数，用户程序从main函数开始运行
+  28          * 输入    : 无
+  29          * 输出    : 无
+  30          * 返回值  : 无
+  31          * 说明    : 无
+  32          *******************************************************************************/
+  33          void main(void)
+  34          {
+  35   1              char p[] = "     ";
+  36   1              char str[8] = {0};
+  37   1              Timer0_Init();                  //定时器0初始化配置
+  38   1              UART1_Init_Config();    //UART1初始化配置
+  39   1              while(1) 
+  40   1              {       
+  41   2                      //温湿度
+  42   2                      Rec_DHT();//读取DHT11
+  43   2                      sprintf(p,"%d,%d",(int)Tem_Z,(int)Hum_Z);               
+  44   2                      UART1_SendBuffer(p,sizeof(p));
+  45   2      
+  46   2                      if(Uart1_Write_Count != Uart1_Read_Count)//如果读指针不等写指针,则证明串口1接收到数据
+  47   2                      {
+  48   3                      
+  49   3                      }
+  50   2                      else if(Uart1_Finish == 1) Uart1_Finish = 0;
+  51   2      
+  52   2                      delay_nms(1500);                        
+  53   2              }
+  54   1      }
+  55          
+C51 COMPILER V9.00   MAIN                                                                  02/15/2020 20:26:29 PAGE 2   
+
+  56          /*******************************************************************************
+  57          * 函数名  : UART1_ISR
+  58          * 描述    : UART1中断服务函数
+  59          * 输入    : 无
+  60          * 输出    : 无
+  61          * 返回值  : 无
+  62          * 说明    : 无
+  63          *******************************************************************************/
+  64          void UART1_ISR(void) interrupt 4 using 1
+  65          {
+  66   1              unsigned char ch;
+  67   1              //接收数据
+  68   1              if(RI)
+  69   1              {
+  70   2                      RI = 0;//清除RI位
+  71   2                      ch=SBUF;
+  72   2                      UART1_Rx_Buffer[Uart1_Write_Count]=ch;  //将接收到的数据写入缓冲区
+  73   2                      UART1_Buffer_PntAdd(&Uart1_Write_Count);//写串口1缓冲区指针加1                  
+  74   2                      if(Uart1_Write_Count == Uart1_Read_Count)//如果读、写缓冲区指针重叠,则读指针加1,这时将丢失1个字节数据
+  75   2                      {
+  76   3                              UART1_Buffer_PntAdd(&Uart1_Read_Count);//读串口1缓冲区指针加1
+  77   3                      }
+  78   2                      Uart1_Delay = 20;//串口1接收数据帧延时(ms)，延时时间到当1帧数据接收完成
+  79   2              }
+  80   1              //发送数据
+  81   1              if (TI)                 
+  82   1              {
+  83   2                      TI = 0;         //清除TI位
+  84   2                      busy = 0;       //清忙标志(1忙,0空闲)
+  85   2              }
+  86   1      }
+  87          /*******************************************************************************
+  88          * 函数名  : Timer0_ISR
+  89          * 描述    : 定时器0中断服务函数
+  90          * 输入    : 无
+  91          * 输出    : 无
+  92          * 返回值  : 无
+  93          * 说明    : 本程序用于检测1帧串口数据接收完成
+  94          *******************************************************************************/
+  95          void Timer0_ISR() interrupt 1 using 1
+  96          {
+  97   1              if(Uart1_Delay>0)
+  98   1              {
+  99   2                      Uart1_Delay--;
+ 100   2                      if(Uart1_Delay==0)
+ 101   2                      {
+ 102   3                              //延时时间到再没有接收到新的串口数据，表示1帧数据接收完成
+ 103   3                              if(Uart1_Write_Count != Uart1_Read_Count) Uart1_Finish=1;
+ 104   3                      }
+ 105   2              }
+ 106   1      
+ 107   1          TL0 = T1MS;                 //初始化计时值
+ 108   1          TH0 = T1MS >> 8;
+ 109   1      }
+ 110          
+ 111          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    622    ----
+   CONSTANT SIZE    =     20    ----
+   XDATA SIZE       =   ----    ----
+C51 COMPILER V9.00   MAIN                                                                  02/15/2020 20:26:29 PAGE 3   
+
+   PDATA SIZE       =    110      20
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
